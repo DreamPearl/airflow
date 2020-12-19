@@ -15,6 +15,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+import gzip as gz
 import unittest
 from unittest import mock
 
@@ -30,6 +31,7 @@ MONGO_COLLECTION = 'example_collection'
 MONGO_QUERY = {"$lt": "{{ ts + 'Z' }}"}
 S3_BUCKET = 'example_bucket'
 S3_KEY = 'example_key'
+GZIP = False
 
 DEFAULT_DATE = timezone.datetime(2017, 1, 1)
 MOCK_MONGO_RETURN = [
@@ -53,6 +55,7 @@ class TestMongoToS3Operator(unittest.TestCase):
             s3_bucket=S3_BUCKET,
             s3_key=S3_KEY,
             dag=self.dag,
+            gzip=GZIP,
         )
 
     def test_init(self):
@@ -63,6 +66,7 @@ class TestMongoToS3Operator(unittest.TestCase):
         self.assertEqual(self.mock_operator.mongo_query, MONGO_QUERY)
         self.assertEqual(self.mock_operator.s3_bucket, S3_BUCKET)
         self.assertEqual(self.mock_operator.s3_key, S3_KEY)
+        self.assertEqual(self.mock_operator.gzip, GZIP)
 
     def test_template_field_overrides(self):
         self.assertEqual(self.mock_operator.template_fields, ['s3_key', 'mongo_query'])
@@ -96,4 +100,28 @@ class TestMongoToS3Operator(unittest.TestCase):
 
         mock_s3_hook.return_value.load_string.assert_called_once_with(
             string_data=s3_doc_str, key=S3_KEY, bucket_name=S3_BUCKET, replace=False
+        )
+
+    @mock.patch('airflow.providers.amazon.aws.transfers.mongo_to_s3.MongoHook')
+    @mock.patch('airflow.providers.amazon.aws.transfers.mongo_to_s3.S3Hook')
+    def test_execute_compress(self, mock_s3_hook, mock_mongo_hook):
+        operator = self.mock_operator
+        self.mock_operator.gzip = True
+        mock_mongo_hook.return_value.find.return_value = iter(MOCK_MONGO_RETURN)
+        mock_s3_hook.return_value.load_string.return_value = True
+
+        operator.execute(None)
+
+        mock_mongo_hook.return_value.find.assert_called_once_with(
+            mongo_collection=MONGO_COLLECTION, query=MONGO_QUERY, mongo_db=None
+        )
+
+        op_stringify = self.mock_operator._stringify
+        op_transform = self.mock_operator.transform
+
+        s3_doc_str = op_stringify(op_transform(MOCK_MONGO_RETURN))
+        docs_str = gz.compress(bytes(s3_doc_str, 'utf-8'))
+
+        mock_s3_hook.return_value.load_string.assert_called_once_with(
+            string_data=docs_str, key=S3_KEY, bucket_name=S3_BUCKET, replace=False
         )

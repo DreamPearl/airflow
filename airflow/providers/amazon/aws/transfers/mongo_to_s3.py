@@ -15,6 +15,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+import gzip as gz
 import json
 from typing import Any, Iterable, Optional, Union, cast
 
@@ -51,6 +52,7 @@ class MongoToS3Operator(BaseOperator):
         mongo_query: Union[list, dict],
         s3_bucket: str,
         s3_key: str,
+        gzip: bool = False,
         mongo_db: Optional[str] = None,
         replace: bool = False,
         **kwargs,
@@ -70,6 +72,7 @@ class MongoToS3Operator(BaseOperator):
         self.s3_bucket = s3_bucket
         self.s3_key = s3_key
         self.replace = replace
+        self.gzip = gzip
 
     def execute(self, context) -> bool:
         """Executed by task_instance at runtime"""
@@ -92,6 +95,9 @@ class MongoToS3Operator(BaseOperator):
 
         # Performs transform then stringifies the docs results into json format
         docs_str = self._stringify(self.transform(results))
+
+        if self.gzip:
+            docs_str = gz.compress(bytes(docs_str, 'utf-8'))
 
         # Load Into S3
         s3_conn.load_string(
