@@ -28,7 +28,18 @@
     <input type="hidden" name="origin" value="{{ origin }}">
     <div class="form-group">
       <label for="conf">Configuration JSON (Optional)</label>
-      <textarea class="form-control" name="conf">{{ conf }}</textarea>
+      <textarea id="editor" class="form-control" name="conf">{{ conf }}</textarea>
+      <!-- Create a simple CodeMirror instance -->
+      <link rel="stylesheet" href="lib/codemirror.css">
+      <script src="lib/codemirror.js"></script>
+      <script>
+        var editor = CodeMirror.fromTextArea(document.getElementById("editor"), {
+          lineNumbers: true,
+          mode: "application/json",
+          gutters: ["CodeMirror-lint-markers"],
+          lint: true
+        });
+      </script>
     </div>
     <p>
       To access configuration in your DAG use <code>{{ '{{ dag_run.conf }}' }}</code>.
